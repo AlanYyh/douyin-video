@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>短视频</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .container { width: 100%; height: 100%; position: relative; overflow: hidden; }
+        .video-wrapper { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+        .video-slide { width: 100%; height: 100%; position: absolute; top: 0; left: 0; display: flex; align-items: center; justify-content: center; background: #000; transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+        .video-slide video { width: 100%; height: 100%; object-fit: contain; }
+        .controls { position: fixed; right: 12px; bottom: 120px; display: flex; flex-direction: column; gap: 20px; z-index: 100; }
+        .ctrl-btn { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
+        .ctrl-btn:active { transform: scale(0.9); background: rgba(255,255,255,0.25); }
+        .ctrl-btn svg { width: 24px; height: 24px; fill: #fff; }
+        .ctrl-btn.active svg { fill: #fe2c55; }
+        .ctrl-btn.small { width: 36px; height: 36px; }
+        .ctrl-btn.small svg { width: 18px; height: 18px; }
+        .progress-bar { position: fixed; bottom: 0; left: 0; width: 100%; height: 3px; background: rgba(255,255,255,0.2); z-index: 100; }
+        .progress-fill { height: 100%; background: #fff; width: 0%; transition: width 0.1s linear; }
+        .top-bar { position: fixed; top: 16px; right: 12px; z-index: 100; display: flex; align-items: center; gap: 10px; }
+        .user-name { color: #fff; font-size: 13px; background: rgba(0,0,0,0.4); padding: 6px 12px; border-radius: 16px; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .category-bar { position: fixed; top: 16px; left: 12px; z-index: 100; }
+        .category-btn { background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); border: none; color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .category-btn svg { width: 16px; height: 16px; fill: #fff; }
+        .tips { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.7); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; z-index: 200; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+        .tips.show { opacity: 1; }
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 300; }
+        .modal.show { display: flex; }
+        .modal-content { background: #1a1a1a; border-radius: 16px; padding: 32px 24px; width: 90%; max-width: 340px; position: relative; max-height: 80vh; overflow-y: auto; }
+        .modal-title { color: #fff; font-size: 20px; text-align: center; margin-bottom: 24px; font-weight: 600; }
+        .form-input { width: 100%; height: 48px; background: #2a2a2a; border: 1px solid #333; border-radius: 8px; padding: 0 16px; color: #fff; font-size: 15px; margin-bottom: 16px; outline: none; transition: border-color 0.2s; }
+        .form-input:focus { border-color: #fe2c55; }
+        .form-btn { width: 100%; height: 48px; background: #fe2c55; border: none; border-radius: 8px; color: #fff; font-size: 16px; font-weight: 500; cursor: pointer; transition: opacity 0.2s; }
+        .form-btn:active { opacity: 0.8; }
+        .form-switch { color: #888; font-size: 14px; text-align: center; margin-top: 16px; }
+        .form-switch span { color: #fe2c55; cursor: pointer; }
+        .modal-close { position: absolute; top: 16px; right: 16px; width: 32px; height: 32px; background: rgba(255,255,255,0.1); border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .modal-close svg { width: 16px; height: 16px; fill: #fff; }
+        .video-slide.loading-state::after { content: ''; position: absolute; width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .category-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .category-item { background: #2a2a2a; border: 2px solid transparent; border-radius: 10px; padding: 12px 8px; text-align: center; color: #fff; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+        .category-item:active { transform: scale(0.95); }
+        .category-item.active { border-color: #fe2c55; background: rgba(254,44,85,0.2); }
+        .fav-list { max-height: 400px; overflow-y: auto; }
+        .fav-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: #2a2a2a; border-radius: 10px; margin-bottom: 10px; cursor: pointer; }
+        .fav-item:last-child { margin-bottom: 0; }
+        .fav-item:active { background: #3a3a3a; }
+        .fav-info { flex: 1; min-width: 0; }
+        .fav-name { font-size: 14px; color: #fff; margin-bottom: 4px; }
+        .fav-time { font-size: 11px; color: #666; }
+        .fav-del { background: #fe2c55; border: none; color: #fff; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
+        .fav-empty { text-align: center; color: #666; padding: 40px 0; }
+        .play-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 500; }
+        .play-overlay.hide { display: none; }
+        .play-btn { background: transparent; border: 3px solid #fff; border-radius: 50%; width: 100px; height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s; }
+        .play-btn:active { transform: scale(0.95); background: rgba(255,255,255,0.1); }
+        .play-btn svg { width: 40px; height: 40px; fill: #fff; margin-bottom: 4px; }
+        .play-btn span { color: #fff; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="video-wrapper" id="videoWrapper"></div>
+        <div class="controls">
+            <button class="ctrl-btn" id="muteBtn">
+                <svg viewBox="0 0 24 24" id="volumeIcon"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+            </button>
+            <button class="ctrl-btn" id="favBtn">
+                <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            </button>
+            <button class="ctrl-btn" id="fullscreenBtn">
+                <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+            </button>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="category-bar">
+            <button class="category-btn" id="categoryBtn">
+                <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+                <span id="categoryName">JK制服</span>
+            </button>
+        </div>
+        <div class="top-bar" id="topBar">
+            <button class="ctrl-btn small" id="userBtn">
+                <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            </button>
+        </div>
+    </div>
+    <div class="tips" id="tips"></div>
+    <div class="modal" id="authModal">
+        <div class="modal-content">
+            <button class="modal-close" id="modalClose"><svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+            <div class="modal-title" id="authTitle">登录</div>
+            <input type="text" class="form-input" id="usernameInput" placeholder="用户名">
+            <input type="password" class="form-input" id="passwordInput" placeholder="密码">
+            <button class="form-btn" id="authBtn">登录</button>
+            <div class="form-switch" id="authSwitch">没有账号？<span id="switchBtn">注册</span></div>
+        </div>
+    </div>
+    <div class="modal" id="categoryModal">
+        <div class="modal-content">
+            <button class="modal-close" id="categoryModalClose"><svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+            <div class="modal-title">选择视频类型</div>
+            <div class="category-list" id="categoryList"></div>
+        </div>
+    </div>
+    <div class="modal" id="favModal">
+        <div class="modal-content">
+            <button class="modal-close" id="favModalClose"><svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+            <div class="modal-title">我的收藏</div>
+            <div class="fav-list" id="favList"></div>
+        </div>
+    </div>
+    <div class="modal" id="nightAgeModal">
+        <div class="modal-content">
+            <button class="modal-close" id="nightAgeModalClose"><svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+            <div class="modal-title">⚠️ 年龄确认</div>
+            <p style="color: #ff6b6b; text-align: center; font-size: 15px; margin-bottom: 24px; line-height: 1.6;">
+                该分类含有成人内容<br>未满 18 周岁禁止访问
+            </p>
+            <p style="color: #fff; text-align: center; font-size: 16px; margin-bottom: 24px;">
+                请确认：您是否已年满 18 周岁？
+            </p>
+            <div style="display: flex; gap: 12px;">
+                <button class="form-btn" id="ageNoBtn" style="background: #444;">否，我未满18岁</button>
+                <button class="form-btn" id="ageYesBtn">是，我已满18岁</button>
+            </div>
+        </div>
+    </div>
+    <div class="modal" id="nightModal">
+        <div class="modal-content">
+            <button class="modal-close" id="nightModalClose"><svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+            <div class="modal-title">🔒 输入访问密码</div>
+            <input type="password" class="form-input" id="nightPasswordInput" placeholder="请输入访问密码">
+            <button class="form-btn" id="nightVerifyBtn">确认进入</button>
+        </div>
+    </div>
+    <div class="play-overlay" id="playOverlay">
+        <button class="play-btn" id="playBtn">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            <span>点击播放</span>
+        </button>
+    </div>
+    <script>
+        const CATEGORIES = [
+            { key: 'all', name: '全部' },
+            { key: 'jk', name: 'JK制服' },
+            { key: 'baisi', name: '白丝' },
+            { key: 'heisi', name: '黑丝' },
+            { key: 'chuanda', name: '穿搭' },
+            { key: 'gaozhiliang', name: '高质量' },
+            { key: 'qingchun', name: '清纯' },
+            { key: 'rewu', name: '热舞' },
+            { key: 'nvda', name: '女大' },
+            { key: 'shejie', name: '御姐' },
+            { key: 'night', name: '深夜' }
+        ];
+
+        let currentCategory = 'jk';
+        let currentCategoryName = 'JK制服';
+        let currentVideoUrl = '';
+        let isMuted = false;
+        let currentUser = null;
+        let favorites = [];
+        let videoHistory = [];
+        let videoCache = [];
+        let nightVideoCount = 0;
+        let isFirstPlay = true;
+        let touchStartY = 0;
+        let touchEndY = 0;
+        let isAnimating = false;
+        let isLogin = true;
+        let nightVerified = false;
+        let nightPasswordVersion = 0;
+
+        const videoWrapper = document.getElementById('videoWrapper');
+        const muteBtn = document.getElementById('muteBtn');
+        const favBtn = document.getElementById('favBtn');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const topBar = document.getElementById('topBar');
+        const tips = document.getElementById('tips');
+        const progressFill = document.getElementById('progressFill');
+        const authModal = document.getElementById('authModal');
+        const authTitle = document.getElementById('authTitle');
+        const authBtn = document.getElementById('authBtn');
+        const authSwitch = document.getElementById('authSwitch');
+        const usernameInput = document.getElementById('usernameInput');
+        const passwordInput = document.getElementById('passwordInput');
+        const modalClose = document.getElementById('modalClose');
+        const volumeIcon = document.getElementById('volumeIcon');
+        const categoryBtn = document.getElementById('categoryBtn');
+        const categoryName = document.getElementById('categoryName');
+        const categoryModal = document.getElementById('categoryModal');
+        const categoryModalClose = document.getElementById('categoryModalClose');
+        const categoryList = document.getElementById('categoryList');
+        const favModal = document.getElementById('favModal');
+        const favModalClose = document.getElementById('favModalClose');
+        const favList = document.getElementById('favList');
+        const nightAgeModal = document.getElementById('nightAgeModal');
+        const nightAgeModalClose = document.getElementById('nightAgeModalClose');
+        const ageYesBtn = document.getElementById('ageYesBtn');
+        const ageNoBtn = document.getElementById('ageNoBtn');
+        const nightModal = document.getElementById('nightModal');
+        const nightModalClose = document.getElementById('nightModalClose');
+        const nightPasswordInput = document.getElementById('nightPasswordInput');
+        const nightVerifyBtn = document.getElementById('nightVerifyBtn');
+
+        function showTips(msg) {
+            tips.textContent = msg;
+            tips.classList.add('show');
+            setTimeout(() => tips.classList.remove('show'), 1500);
+        }
+
+        function updateTopBar() {
+            if (currentUser) {
+                topBar.innerHTML = `
+                    <button class="ctrl-btn small" id="favListBtn"><svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/></svg></button>
+                    <span class="user-name">${currentUser}</span>
+                    <button class="ctrl-btn small" id="logoutBtn"><svg viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg></button>
+                `;
+                document.getElementById('favListBtn').addEventListener('click', openFavModal);
+                document.getElementById('logoutBtn').addEventListener('click', logout);
+            } else {
+                topBar.innerHTML = `
+                    <button class="ctrl-btn small" id="userBtn"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></button>
+                `;
+                document.getElementById('userBtn').addEventListener('click', () => authModal.classList.add('show'));
+            }
+        }
+
+        function logout() {
+            if (confirm('确定要退出登录吗？')) {
+                currentUser = null;
+                favorites = [];
+                localStorage.removeItem('user');
+                updateTopBar();
+                updateFavBtn();
+                showTips('已退出登录');
+            }
+        }
+
+        function formatTime(str) {
+            const d = new Date(str);
+            const pad = n => n.toString().padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        }
+
+        function initCategoryList() {
+            categoryList.innerHTML = CATEGORIES.map(c => `
+                <div class="category-item ${c.key === currentCategory ? 'active' : ''}" data-key="${c.key}" data-name="${c.name}">${c.name}</div>
+            `).join('');
+            categoryList.querySelectorAll('.category-item').forEach(item => {
+                item.addEventListener('click', async () => {
+                    const selectedKey = item.dataset.key;
+                    const selectedName = item.dataset.name;
+                    
+                    if (selectedKey === 'night' && !nightVerified) {
+                        categoryModal.classList.remove('show');
+                        nightAgeModal.classList.add('show');
+                        return;
+                    }
+                    
+                    currentCategory = selectedKey;
+                    currentCategoryName = selectedName;
+                    
+                    if (currentCategory === 'night') {
+                        const res = await fetch('/api/night/list');
+                        const data = await res.json();
+                        nightVideoCount = data.count || 0;
+                        categoryName.textContent = `深夜模式 - 共${nightVideoCount}个视频`;
+                    } else {
+                        categoryName.textContent = currentCategoryName;
+                    }
+                    
+                    localStorage.setItem('category', currentCategory);
+                    localStorage.setItem('categoryName', currentCategoryName);
+                    categoryModal.classList.remove('show');
+                    videoHistory = [];
+                    videoCache = [];
+                    loadNewVideo();
+                });
+            });
+        }
+        
+        async function verifyNightPassword() {
+            const password = nightPasswordInput.value.trim();
+            if (!password) {
+                showTips('请输入密码');
+                return;
+            }
+            try {
+                const res = await fetch('/api/night/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    nightVerified = true;
+                    nightPasswordVersion = data.passwordVersion;
+                    nightModal.classList.remove('show');
+                    currentCategory = 'night';
+                    currentCategoryName = '深夜';
+                    const listRes = await fetch('/api/night/list');
+                    const listData = await listRes.json();
+                    nightVideoCount = listData.count || 0;
+                    categoryName.textContent = `深夜模式 - 共${nightVideoCount}个视频`;
+                    localStorage.setItem('category', currentCategory);
+                    localStorage.setItem('categoryName', currentCategoryName);
+                    videoHistory = [];
+                    videoCache = [];
+                    loadNewVideo();
+                    showTips('验证成功');
+                } else {
+                    showTips(data.message || '密码错误');
+                }
+            } catch (e) {
+                showTips('验证失败');
+            }
+        }
+        
+        nightAgeModalClose.addEventListener('click', () => nightAgeModal.classList.remove('show'));
+        ageNoBtn.addEventListener('click', () => {
+            nightAgeModal.classList.remove('show');
+            showTips('未满18周岁禁止访问');
+        });
+        ageYesBtn.addEventListener('click', () => {
+            nightAgeModal.classList.remove('show');
+            nightPasswordInput.value = '';
+            nightModal.classList.add('show');
+            nightPasswordInput.focus();
+        });
+        
+        nightModalClose.addEventListener('click', () => nightModal.classList.remove('show'));
+        nightVerifyBtn.addEventListener('click', verifyNightPassword);
+        nightPasswordInput.addEventListener('keyup', e => {
+            if (e.key === 'Enter') verifyNightPassword();
+        });
+
+        function openFavModal() {
+            renderFavList();
+            favModal.classList.add('show');
+        }
+
+        function renderFavList() {
+            if (favorites.length === 0) {
+                favList.innerHTML = '<div class="fav-empty">暂无收藏</div>';
+                return;
+            }
+            favList.innerHTML = favorites.map((fav, i) => `
+                <div class="fav-item" data-url="${fav.video_url}">
+                    <div class="fav-info">
+                        <div class="fav-name">视频${i + 1}</div>
+                        <div class="fav-time">${formatTime(fav.created_at)}</div>
+                    </div>
+                    <button class="fav-del" data-url="${fav.video_url}">删除</button>
+                </div>
+            `).join('');
+            favList.querySelectorAll('.fav-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('fav-del')) return;
+                    const url = item.dataset.url;
+                    playVideo(url, true);
+                    favModal.classList.remove('show');
+                });
+            });
+            favList.querySelectorAll('.fav-del').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const url = btn.dataset.url;
+                    await fetch('/api/user/favorite', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: currentUser, videoUrl: url, action: 'remove' })
+                    });
+                    favorites = favorites.filter(f => f.video_url !== url);
+                    renderFavList();
+                    updateFavBtn();
+                    showTips('已删除');
+                });
+            });
+        }
+
+        async function loadNewVideo() {
+            if (currentVideoUrl) {
+                videoHistory.push(currentVideoUrl);
+            }
+            
+            showLoading();
+            try {
+                let res, data;
+                
+                if (currentCategory === 'night') {
+                    res = await fetch('/api/night/random');
+                    data = await res.json();
+                    
+                    if (data.passwordVersion && data.passwordVersion !== nightPasswordVersion) {
+                        nightVerified = false;
+                        nightPasswordVersion = 0;
+                        currentCategory = 'jk';
+                        currentCategoryName = 'JK制服';
+                        categoryName.textContent = currentCategoryName;
+                        localStorage.setItem('category', currentCategory);
+                        localStorage.setItem('categoryName', currentCategoryName);
+                        videoCache = [];
+                        hideLoading();
+                        showTips('内容已发生变化，请重新输入密码');
+                        loadNewVideo();
+                        return;
+                    }
+                    
+                    if (data.success && data.videoUrl) {
+                        nightVideoCount = data.count;
+                        categoryName.textContent = `深夜模式 - 共${nightVideoCount}个视频`;
+                        playVideo(data.videoUrl);
+                    } else {
+                        showTips(data.message || '暂无视频');
+                        hideLoading();
+                    }
+                } else {
+                    res = await fetch(`/api/video?category=${currentCategory}&username=${currentUser || ''}`);
+                    data = await res.json();
+                    if (data.success && data.videoUrl) {
+                        playVideo(data.videoUrl);
+                    } else {
+                        showTips('加载失败');
+                        hideLoading();
+                    }
+                }
+            } catch (e) {
+                showTips('网络错误');
+                hideLoading();
+            }
+        }
+
+        function showLoading() {
+            const slide = videoWrapper.querySelector('.video-slide');
+            if (slide) slide.classList.add('loading-state');
+        }
+
+        function hideLoading() {
+            const slide = videoWrapper.querySelector('.video-slide');
+            if (slide) slide.classList.remove('loading-state');
+        }
+
+        function playVideo(url) {
+            currentVideoUrl = url;
+            
+            videoCache.push(url);
+            if (videoCache.length > 2) {
+                const oldUrl = videoCache.shift();
+                const oldVideos = document.querySelectorAll(`video[src="${oldUrl}"]`);
+                oldVideos.forEach(v => {
+                    v.pause();
+                    v.removeAttribute('src');
+                    v.load();
+                });
+            }
+            
+            videoWrapper.innerHTML = '';
+            const slide = document.createElement('div');
+            slide.className = 'video-slide';
+            const video = document.createElement('video');
+            video.loop = true;
+            video.playsInline = true;
+            video.setAttribute('webkit-playsinline', 'true');
+            video.preload = 'none';
+            video.muted = isMuted;
+            video.src = url;
+            
+            slide.classList.add('loading-state');
+            video.addEventListener('canplay', () => {
+                slide.classList.remove('loading-state');
+                video.play().catch(() => {});
+            }, { once: true });
+            
+            video.load();
+            
+            video.addEventListener('timeupdate', () => {
+                const progress = (video.currentTime / video.duration) * 100;
+                progressFill.style.width = progress + '%';
+            });
+            
+            slide.appendChild(video);
+            videoWrapper.appendChild(slide);
+            updateFavBtn();
+        }
+
+        function goBack() {
+            if (videoHistory.length === 0) {
+                showTips('没有上一个视频了');
+                return;
+            }
+            const prevUrl = videoHistory.pop();
+            playVideo(prevUrl);
+        }
+
+        function slideVideos(direction) {
+            if (isAnimating) return;
+            isAnimating = true;
+            const slide = videoWrapper.querySelector('.video-slide');
+            
+            if (direction === 'up') {
+                if (slide) slide.style.transform = 'translateY(-100%)';
+                setTimeout(() => {
+                    loadNewVideo();
+                    isAnimating = false;
+                }, 250);
+            } else {
+                if (videoHistory.length === 0) {
+                    showTips('没有上一个视频了');
+                    isAnimating = false;
+                    return;
+                }
+                if (slide) slide.style.transform = 'translateY(100%)';
+                setTimeout(() => {
+                    goBack();
+                    isAnimating = false;
+                }, 250);
+            }
+        }
+
+        videoWrapper.addEventListener('touchstart', (e) => {
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+
+        videoWrapper.addEventListener('touchend', (e) => {
+            touchEndY = e.changedTouches[0].clientY;
+            const diff = touchStartY - touchEndY;
+            if (Math.abs(diff) > 50) {
+                if (diff > 0) {
+                    slideVideos('up');
+                } else {
+                    slideVideos('down');
+                }
+            }
+        }, { passive: true });
+
+        let wheelTimeout;
+        videoWrapper.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            clearTimeout(wheelTimeout);
+            wheelTimeout = setTimeout(() => {
+                if (e.deltaY > 0) {
+                    slideVideos('up');
+                } else {
+                    slideVideos('down');
+                }
+            }, 50);
+        }, { passive: false });
+
+        muteBtn.addEventListener('click', () => {
+            isMuted = !isMuted;
+            const video = videoWrapper.querySelector('video');
+            if (video) video.muted = isMuted;
+            if (isMuted) {
+                volumeIcon.innerHTML = '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>';
+                muteBtn.classList.add('active');
+            } else {
+                volumeIcon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>';
+                muteBtn.classList.remove('active');
+            }
+        });
+
+        function updateFavBtn() {
+            if (!currentUser || !currentVideoUrl) {
+                favBtn.classList.remove('active');
+                return;
+            }
+            const isFav = favorites.some(f => f.video_url === currentVideoUrl);
+            if (isFav) {
+                favBtn.classList.add('active');
+            } else {
+                favBtn.classList.remove('active');
+            }
+        }
+
+        favBtn.addEventListener('click', async () => {
+            if (currentCategory === 'night') {
+                showTips('深夜分类视频禁止收藏');
+                return;
+            }
+            if (!currentUser) {
+                authModal.classList.add('show');
+                return;
+            }
+            if (!currentVideoUrl) return;
+            const isFav = favorites.some(f => f.video_url === currentVideoUrl);
+            const action = isFav ? 'remove' : 'add';
+            await fetch('/api/user/favorite', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: currentUser, videoUrl: currentVideoUrl, category: currentCategory, action })
+            });
+            if (isFav) {
+                favorites = favorites.filter(f => f.video_url !== currentVideoUrl);
+                showTips('已取消收藏');
+            } else {
+                favorites.unshift({ video_url: currentVideoUrl, category: currentCategory, created_at: new Date().toISOString() });
+                showTips('已收藏');
+            }
+            updateFavBtn();
+        });
+
+        fullscreenBtn.addEventListener('click', () => {
+            const video = videoWrapper.querySelector('video');
+            if (video) {
+                if (video.requestFullscreen) {
+                    video.requestFullscreen();
+                } else if (video.webkitRequestFullscreen) {
+                    video.webkitRequestFullscreen();
+                } else if (video.webkitEnterFullscreen) {
+                    video.webkitEnterFullscreen();
+                }
+            }
+        });
+
+        categoryBtn.addEventListener('click', () => {
+            initCategoryList();
+            categoryModal.classList.add('show');
+        });
+
+        categoryModalClose.addEventListener('click', () => categoryModal.classList.remove('show'));
+        modalClose.addEventListener('click', () => authModal.classList.remove('show'));
+        favModalClose.addEventListener('click', () => favModal.classList.remove('show'));
+
+        document.getElementById('switchBtn').addEventListener('click', function toggleAuth() {
+            isLogin = !isLogin;
+            authTitle.textContent = isLogin ? '登录' : '注册';
+            authBtn.textContent = isLogin ? '登录' : '注册';
+            authSwitch.innerHTML = isLogin ? '没有账号？<span id="switchBtn">注册</span>' : '已有账号？<span id="switchBtn">登录</span>';
+            document.getElementById('switchBtn').addEventListener('click', toggleAuth);
+        });
+
+        authBtn.addEventListener('click', async () => {
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value.trim();
+            if (!username || !password) {
+                showTips('请填写完整信息');
+                return;
+            }
+            const url = isLogin ? '/api/user/login' : '/api/user/register';
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (data.success) {
+                if (isLogin) {
+                    currentUser = username;
+                    localStorage.setItem('user', username);
+                    authModal.classList.remove('show');
+                    showTips('登录成功');
+                    loadFavorites();
+                    updateTopBar();
+                } else {
+                    showTips('注册成功，请登录');
+                    isLogin = true;
+                    authTitle.textContent = '登录';
+                    authBtn.textContent = '登录';
+                    authSwitch.innerHTML = '没有账号？<span id="switchBtn">注册</span>';
+                }
+            } else {
+                showTips(data.message);
+            }
+        });
+
+        async function loadFavorites() {
+            if (!currentUser) return;
+            const res = await fetch('/api/user/favorites?username=' + currentUser);
+            const data = await res.json();
+            favorites = data.favorites || [];
+            updateFavBtn();
+        }
+
+        const playOverlay = document.getElementById('playOverlay');
+        const playBtn = document.getElementById('playBtn');
+
+        function init() {
+            const savedUser = localStorage.getItem('user');
+            const savedCategory = localStorage.getItem('category');
+            const savedCategoryName = localStorage.getItem('categoryName');
+            if (savedUser) {
+                currentUser = savedUser;
+                loadFavorites();
+            }
+            if (savedCategory && savedCategory !== 'night') {
+                currentCategory = savedCategory;
+                currentCategoryName = savedCategoryName || 'JK制服';
+                categoryName.textContent = currentCategoryName;
+            } else if (savedCategory === 'night') {
+                currentCategory = 'jk';
+                currentCategoryName = 'JK制服';
+                categoryName.textContent = currentCategoryName;
+                localStorage.setItem('category', 'jk');
+                localStorage.setItem('categoryName', 'JK制服');
+            }
+            updateTopBar();
+            
+            playBtn.addEventListener('click', async () => {
+                playOverlay.classList.add('hide');
+                isFirstPlay = false;
+                await loadNewVideo();
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>
